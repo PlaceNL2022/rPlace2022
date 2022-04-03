@@ -21,10 +21,10 @@ pip install --force https://github.com/PlaceNL/rPlace2022
 ## Usage
 
 ```bash
-python PlaceNL -u "USERNAME" "PASSWORD"
+PlaceNL -u "USERNAME" "PASSWORD"
 ```
 
 The bot supports multiple users:
 ```bash
-python PlaceNL -u "USERNAME1" "PASSWORD1" -u "USERNAME2" "PASSWORD2"
+PlaceNL -u "USERNAME1" "PASSWORD1" -u "USERNAME2" "PASSWORD2"
 ```
