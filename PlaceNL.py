@@ -542,25 +542,19 @@ class RedditPlaceClient:
             'query': SET_PIXEL_QUERY
         }
 
+        self.logger.info(
+            "Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", col, row,
+            canvas_index, color)
 
-<< << << < HEAD
- self.logger.info(
-      "Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", col, row,
-      canvas_index, color)
-== == == =
- self.logger.info("Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", col, row,
-                   canvas_index, color)
->>>>>> > b0af102e0571d43ee109201d6664e4cb05efbc7c
+        # Create a new session without any existing cookies
+        async with aiohttp.ClientSession() as new_session:
+            async with new_session.post(REDDIT_PLACE_SET_PIXEL_URL, headers=headers, json=body) as resp:
+                if resp.status != 200:
+                    self.logger.error("Error placing pixel! HTTP status %d.", resp.status)
+                    text = await resp.text()
+                    self.logger.error("%s", text)
 
- # Create a new session without any existing cookies
- async with aiohttp.ClientSession() as new_session:
-      async with new_session.post(REDDIT_PLACE_SET_PIXEL_URL, headers=headers, json=body) as resp:
-           if resp.status != 200:
-                self.logger.error("Error placing pixel! HTTP status %d.", resp.status)
-                text = await resp.text()
-                self.logger.error("%s", text)
-
-                return False, 60.0
+                    return False, 60.0
 
             try:
                 data = await resp.json()
