@@ -14,15 +14,17 @@ and automatically place pixels at the desired locations.
 
 ## Installation
 
-For now, just download the script and run it with Python. More easy installation methods will come soon.
+```bash
+pip install https://github.com/PlaceNL/rPlace2022
+```
 
 ## Usage
 
 ```bash
-python PlaceNL.py -u "USERNAME" "PASSWORD"
+python PlaceNL -u "USERNAME" "PASSWORD"
 ```
 
 The bot supports multiple users:
 ```bash
-python PlaceNL.py -u "USERNAME1" "PASSWORD1" -u "USERNAME2" "PASSWORD2"
+python PlaceNL -u "USERNAME1" "PASSWORD1" -u "USERNAME2" "PASSWORD2"
 ```
