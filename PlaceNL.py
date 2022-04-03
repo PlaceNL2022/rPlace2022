@@ -46,6 +46,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 from rich.logging import RichHandler
 
+__version__ = '1'
+
 logger = logging.getLogger()
 logging.basicConfig(format=r"[%(name)s] %(message)s", handlers=[RichHandler()])
 
@@ -173,7 +175,7 @@ class CNCOrderClient:
             raise Exception("WebSocket not yet initialized! Use async with!")
 
         await self.ws.send_str(json.dumps({"type": "getmap"}))
-        await self.ws.send_str(json.dumps({"type": "brand", "brand": "placenl-python"}))
+        await self.ws.send_str(json.dumps({"type": "brand", "brand": f"PlaceNLpythonV{__version__}"}))
 
         async for msg in self.ws:
             try:
@@ -323,20 +325,22 @@ class RedditPlaceClient:
         result = await self.scrape_access_token()
         if not result:
             self.logger.error("Could not refresh access token, trying again in one minute")
+            return False
 
-            # Try again in 5 minutes
-            asyncio.get_running_loop().create_task(self.refresh_access_token(60))
-        else:
-            self.access_token, expires_in = result
-            expires = timedelta(seconds=expires_in / 1000)
-            self.access_token_expire = datetime.now() + expires
+        self.access_token, expires_in = result
+        expires = timedelta(seconds=expires_in / 1000)
+        self.access_token_expire = datetime.now() + expires
 
-            self.logger.info("Refreshed access token: %s. Expires: %s (%d minutes)", self.access_token,
-                             self.access_token_expire, expires.total_seconds() // 60)
+        self.logger.info("Refreshed access token: %s. Expires: %s (%d minutes)", self.access_token,
+                         self.access_token_expire, expires.total_seconds() // 60)
+
+        return True
 
     async def load_canvas(self, canvas_id) -> Optional[numpy.ndarray]:
         if datetime.now() > self.access_token_expire:
-            await self.refresh_access_token()
+            result = await self.refresh_access_token()
+            if not result:
+                return
 
         headers = {
             "User-Agent": self.user_agent,
@@ -433,7 +437,10 @@ class RedditPlaceClient:
 
     async def place_pixel(self, row, col, color) -> float:
         if datetime.now() > self.access_token_expire:
-            await self.refresh_access_token()
+            result = await self.refresh_access_token()
+
+            if not result:
+                return 60.0
 
         self.logger.info("Attempting to place a pixel at (%d, %d) with color %d...", row, col, color)
 
