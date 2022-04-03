@@ -556,39 +556,31 @@ class RedditPlaceClient:
 
                     return False, 60.0
 
-            try:
-                data = await resp.json()
-                errors = data.get('errors')
+                try:
+                    data = await resp.json()
+                    errors = data.get('errors')
 
-                if errors:
-                    self.logger.error(
-                        "Error placing pixel! Likely placing a new pixel too soon!")
-                    next_available = errors[0].get(
-                        'extensions', {}).get('nextAvailablePixelTs')
+                    if errors:
+                        self.logger.error(
+                            "Error placing pixel! Likely placing a new pixel too soon!")
+                        next_available = errors[0].get(
+                            'extensions', {}).get('nextAvailablePixelTs')
 
-                    if next_available:
-                        next_dt = datetime.fromtimestamp(float(next_available) / 1000)
-                        delta = next_dt - datetime.now()
-                        self.logger.info("Next available possibility: %s (%d seconds)",
-                                         next_dt, delta.total_seconds())
+                        if next_available:
+                            next_dt = datetime.fromtimestamp(float(next_available) / 1000)
+                            delta = next_dt - datetime.now()
+                            self.logger.info("Next available possibility: %s (%d seconds)",
+                                             next_dt, delta.total_seconds())
 
-                        return False, delta.total_seconds() + random.randint(5, 60)
+                            return False, delta.total_seconds() + random.randint(5, 60)
+                        else:
+                            return False, 300.0  # wait 5 minutes by default
                     else:
-                        return False, 300.0  # wait 5 minutes by default
-                else:
-                    next_available = float(
-                        data['data']['act']['data'][0]['data']
-                        ['nextAvailablePixelTimestamp'])
-                    next_dt = datetime.fromtimestamp(next_available / 1000)
-                    delta = next_dt - datetime.now()
-
-                    self.logger.info("Success! Next pixel will be set at %s (%d seconds)",
-                                     next_dt, delta.total_seconds())
-
-                    return True, delta.total_seconds() + random.randint(5, 60)
-            except Exception as e:
-                self.logger.exception("Error placing pixel! Could not read response.")
-                return False, 60.0
+                        next_available = float(
+                            data['data']['act']['data'][0]['data']
+                            ['nextAvailablePixelTimestamp'])
+                        next_dt = datetime.fromtimestamp(next_available / 1000)
+                        delta = next_dt - datetime.now()
 
 
 async def on_request_start(session, ctx, params):
