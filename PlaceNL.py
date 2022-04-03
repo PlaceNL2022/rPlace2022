@@ -448,18 +448,21 @@ class RedditPlaceClient:
                         return canvas
 
     async def load_full_map(self):
-        canvas1 = await self.load_canvas(0)
-        canvas2 = await self.load_canvas(1)
-        canvas3 = await self.load_canvas(2)
-        canvas4 = await self.load_canvas(3)
+        try:
+            canvas1 = await self.load_canvas(0)
+            canvas2 = await self.load_canvas(1)
+            canvas3 = await self.load_canvas(2)
+            canvas4 = await self.load_canvas(3)
 
-        if canvas1 is not None and canvas2 is not None and canvas3 is not None and canvas4 is not None:
-            top = numpy.hstack([canvas1, canvas2])
-            bottom = numpy.hstack([canvas3, canvas4])
-            self.current_canvas = numpy.vstack([top, bottom])
+            if canvas1 is not None and canvas2 is not None and canvas3 is not None and canvas4 is not None:
+                top = numpy.hstack([canvas1, canvas2])
+                bottom = numpy.hstack([canvas3, canvas4])
+                self.current_canvas = numpy.vstack([top, bottom])
 
-            self.logger.info("Loaded full canvas (shape: %s, dtype: %s)",
-                             self.current_canvas.shape, self.current_canvas.dtype)
+                self.logger.info("Loaded full canvas (shape: %s, dtype: %s)",
+                                 self.current_canvas.shape, self.current_canvas.dtype)
+        except aiohttp.ServerDisconnectedError:
+            logger.exception("Could not obtain current canvas!")
 
     def get_pixels_to_update(self, order_map):
         if self.current_canvas is None:
