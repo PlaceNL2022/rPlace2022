@@ -29,6 +29,12 @@ The bot supports multiple users:
 PlaceNL -u "USERNAME1" "PASSWORD1" -u "USERNAME2" "PASSWORD2"
 ```
 
+**IMPORTANT**: Do you have a $ in your password? Please escape it as follows:
+
+```bash
+PlaceNL -u "USERNAME" "PA\$\$WORD"
+```
+
 ## Docker image
 
 For people experienced with Docker, there's also a docker image you can run:
