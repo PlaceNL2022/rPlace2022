@@ -582,9 +582,18 @@ class RedditPlaceClient:
                         next_dt = datetime.fromtimestamp(next_available / 1000)
                         delta = next_dt - datetime.now()
 
+                        self.logger.info("Success! Next pixel will be set at %s (%d seconds)",
+                                         next_dt, delta.total_seconds())
+
+                        return True, delta.total_seconds() + random.randint(5, 60)
+                except Exception as e:
+                    self.logger.exception("Error placing pixel! Could not read response.")
+                    return False, 60.0
+
 
 async def on_request_start(session, ctx, params):
-    logging.getLogger('aiohttp.client').debug("Making %s request to %s", params.method, params.url)
+    logging.getLogger('aiohttp.client').debug(
+        "Making %s request to %s", params.method, params.url)
     logging.getLogger('aiohttp.client').debug("%s", params.headers)
 
 
