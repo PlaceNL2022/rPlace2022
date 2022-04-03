@@ -57,7 +57,9 @@ REDDIT_LOGIN_POST = "https://www.reddit.com/login"
 REDDIT_PLACE_URL = "https://www.reddit.com/r/place/"
 REDDIT_PLACE_SET_PIXEL_URL = "https://gql-realtime-2.reddit.com/query"
 PLACE_WEBSOCKET = "wss://gql-realtime-2.reddit.com/query"
-CNC_WEBSOCKET = "wss://placenl.noahvdaa.me/api/ws"
+BACKEND_DOMAIN = "placenl.noahvdaa.me"
+CNC_WEBSOCKET = f"wss://{BACKEND_DOMAIN}/api/ws"
+BACKEND_MAPS_URL = f"https://{BACKEND_DOMAIN}/maps"
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:98.0) Gecko/20100101 Firefox/98.0"
 
 GRAPHQL_CANVAS_QUERY = """
@@ -197,7 +199,7 @@ class CNCOrderClient:
                 continue
 
             if data['type'] == 'map':
-                map_url = f"https://placenl.noahvdaa.me/maps/{data['data']}"
+                map_url = f"{BACKEND_MAPS_URL}/{data['data']}"
                 reason = data.get('reason')
                 self.logger.info("Loading new map (reason: %s)", reason if reason else "connected to server")
                 self.logger.info("Map URL: %s", map_url)
