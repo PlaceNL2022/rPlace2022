@@ -27,6 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from __future__ import annotations
 import re
 import json
 import random
@@ -45,6 +46,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from rich.logging import RichHandler
 
+logger = logging.getLogger()
 logging.basicConfig(format=r"[%(name)s] %(message)s", handlers=[RichHandler()])
 
 REDDIT_LOGIN_GET = "https://www.reddit.com/login/?experiment_d2x_2020ify_buttons=enabled&experiment_d2x_sso_login_link=enabled&experiment_d2x_google_sso_gis_parity=enabled&experiment_d2x_onboarding=enabled"
@@ -155,7 +157,15 @@ class CNCOrderClient:
     async def ping(self):
         await asyncio.sleep(5)
 
-        await self.ws.send_str(json.dumps({"type": "ping"}))
+        if not self.ws:
+            return
+
+        try:
+            await self.ws.send_str(json.dumps({"type": "ping"}))
+        except ConnectionResetError:
+            self.logger.warning("Could not send ping, websocket closed?")
+            self.ws = None
+
         asyncio.get_running_loop().create_task(self.ping())
 
     async def receive_orders(self):
@@ -163,6 +173,7 @@ class CNCOrderClient:
             raise Exception("WebSocket not yet initialized! Use async with!")
 
         await self.ws.send_str(json.dumps({"type": "getmap"}))
+        await self.ws.send_str(json.dumps({"type": "brand", "brand": "placenl-python"}))
 
         async for msg in self.ws:
             try:
@@ -188,7 +199,8 @@ class CNCOrderClient:
             data = await resp.read()
 
             self.order_map = plt.imread(BytesIO(data))
-            self.logger.info("Downloaded orders map, image size: %s (dtype: %s)", self.order_map.shape, self.order_map.dtype)
+            self.logger.info("Downloaded orders map, image size: %s (dtype: %s)", self.order_map.shape,
+                             self.order_map.dtype)
 
     async def signal_pixel_drawn(self, row, col, color):
         if not self.ws:
@@ -206,6 +218,7 @@ class RedditPlaceClient:
         self.user_agent = user_agent if user_agent else DEFAULT_USER_AGENT
 
         self.access_token = ""
+        self.access_token_expire = None
         self.current_canvas = None
 
         self.logger = logging.getLogger(f'PlaceNL.reddit.{username}')
@@ -224,12 +237,10 @@ class RedditPlaceClient:
 
         self.access_token, expires_in = result
         expires = timedelta(seconds=expires_in / 1000)
-        expire_date = datetime.now() + expires
+        self.access_token_expire = datetime.now() + expires
 
         self.logger.info("Login successful, obtained access token: %s. Expires: %s (%d minutes)", self.access_token,
-                         expire_date, expires.total_seconds() // 60)
-
-        asyncio.get_running_loop().create_task(self.refresh_access_token(expires.total_seconds() - 300))
+                         self.access_token_expire, expires.total_seconds() // 60)
 
         return self
 
@@ -308,10 +319,7 @@ class RedditPlaceClient:
 
             return access_token, expires_in
 
-    async def refresh_access_token(self, delay):
-        # When the token is near expiration, refresh
-        await asyncio.sleep(delay)
-
+    async def refresh_access_token(self):
         result = await self.scrape_access_token()
         if not result:
             self.logger.error("Could not refresh access token, trying again in one minute")
@@ -321,14 +329,15 @@ class RedditPlaceClient:
         else:
             self.access_token, expires_in = result
             expires = timedelta(seconds=expires_in / 1000)
-            expire_date = datetime.now() + expires
+            self.access_token_expire = datetime.now() + expires
 
             self.logger.info("Refreshed access token: %s. Expires: %s (%d minutes)", self.access_token,
-                             expire_date, expires.total_seconds() // 60)
-
-            asyncio.get_running_loop().create_task(self.refresh_access_token(expires.total_seconds() - 300))
+                             self.access_token_expire, expires.total_seconds() // 60)
 
     async def load_canvas(self, canvas_id) -> Optional[numpy.ndarray]:
+        if datetime.now() > self.access_token_expire:
+            await self.refresh_access_token()
+
         headers = {
             "User-Agent": self.user_agent,
             "Origin": "https://hot-potato.reddit.com"
@@ -423,6 +432,9 @@ class RedditPlaceClient:
         return to_update
 
     async def place_pixel(self, row, col, color) -> float:
+        if datetime.now() > self.access_token_expire:
+            await self.refresh_access_token()
+
         self.logger.info("Attempting to place a pixel at (%d, %d) with color %d...", row, col, color)
 
         headers = {
@@ -520,17 +532,21 @@ async def reddit_client_task(trace_config: aiohttp.TraceConfig, cnc_client: CNCO
                 # Compare current canvas to order map
                 to_update = place_client.get_pixels_to_update(cnc_client.order_map)
 
-                for pixel in to_update:
-                    hex = matplotlib.colors.to_hex(cnc_client.order_map[pixel[0], pixel[1], :3]).upper()
-                    color_index = COLOR_MAPPINGS[hex]
+                if len(to_update) == 0:
+                    # No pixels to update, try again in 30 seconds
+                    delay = 30
+                else:
+                    for pixel in to_update:
+                        hex = matplotlib.colors.to_hex(cnc_client.order_map[pixel[0], pixel[1], :3]).upper()
+                        color_index = COLOR_MAPPINGS[hex]
 
-                    delay = await place_client.place_pixel(pixel[0], pixel[1], color_index)
+                        delay = await place_client.place_pixel(pixel[0], pixel[1], color_index)
 
-                    if delay > 60:
-                        await cnc_client.signal_pixel_drawn(pixel[0], pixel[1], color_index)
-                        break
+                        if delay > 60:
+                            await cnc_client.signal_pixel_drawn(pixel[0], pixel[1], color_index)
+                            break
 
-                    await asyncio.sleep(1)
+                        await asyncio.sleep(1)
 
 
 async def on_request_start(session, ctx, params):
@@ -564,18 +580,30 @@ async def main():
     trace_config = aiohttp.TraceConfig()
     trace_config.on_request_start.append(on_request_start)
 
-    async with aiohttp.ClientSession(trace_configs=[trace_config]) as cnc_session:
-        async with CNCOrderClient(cnc_session) as cnc_client:
-            cnc_task = asyncio.create_task(cnc_update_task(cnc_client))
+    while True:
+        async with aiohttp.ClientSession(trace_configs=[trace_config]) as cnc_session:
+            async with CNCOrderClient(cnc_session) as cnc_client:
+                cnc_task = asyncio.create_task(cnc_update_task(cnc_client))
 
-            # Wait a few seconds before starting reddit clients to make sure C&C data has downloaded
-            await asyncio.sleep(5)
+                # Wait a few seconds before starting reddit clients to make sure C&C data has downloaded
+                await asyncio.sleep(5)
 
-            tasks = [cnc_task]
+                tasks = [cnc_task]
 
-            for username, password in args.user:
-                tasks.append(reddit_client_task(trace_config, cnc_client, username, password))
+                for username, password in args.user:
+                    tasks.append(reddit_client_task(trace_config, cnc_client, username, password))
 
-            await asyncio.gather(*tasks)
+                await asyncio.gather(*tasks)
 
-asyncio.run(main())
+        # If we reach here, something went wrong, cancel current tasks, and start again
+        logger.warning("Lost connection to C&C, restarting...")
+        for task in tasks:
+            task.cancel()
+
+
+def run():
+    asyncio.run(main())
+
+
+if __name__ == '__main__':
+    run()
