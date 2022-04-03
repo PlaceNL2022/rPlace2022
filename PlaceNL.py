@@ -565,14 +565,17 @@ class RedditPlaceClient:
 
                         return canvas
 
-    async def load_full_map(self):
+    async def load_full_map(self) -> None:
         """Load the full map dynamically based on MAP_WIDTH and MAP_HEIGHT."""
         current_canvas_image = Image.new('RGBA', (MAP_WIDTH, MAP_HEIGHT), (0, 0, 0, 0))
         for i in range(MAP_HEIGHT // 1000):
             for j in range(MAP_WIDTH // 1000):
                 map_id = (i * MAP_WIDTH // 1000) + j
-
                 canvas = await self.load_canvas(map_id)  # TODO: implement if None
+                if canvas is None:
+                    self.current_canvas = None
+                    self.logger.error("Failed to Load canvas with id %d", map_id)
+                    return
                 current_canvas_image.paste(canvas, (j * 1000, i * 1000))
 
         self.current_canvas = np.array(current_canvas_image.getdata())
