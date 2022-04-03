@@ -37,14 +37,13 @@ import asyncio
 import string
 import warnings
 from io import BytesIO
-from typing import Optional
+from typing import Optional, Tuple, List
 from datetime import datetime, timedelta
 from collections import deque
 
-import numpy
+import numpy as np
 import aiohttp
-import matplotlib
-import matplotlib.pyplot as plt
+from PIL import Image
 from rich.logging import RichHandler
 
 __version__ = '2'
@@ -52,7 +51,13 @@ __version__ = '2'
 logger = logging.getLogger()
 logging.basicConfig(format=r"[%(name)s] %(message)s", handlers=[RichHandler()])
 
-REDDIT_LOGIN_GET = "https://www.reddit.com/login/?experiment_d2x_2020ify_buttons=enabled&experiment_d2x_sso_login_link=enabled&experiment_d2x_google_sso_gis_parity=enabled&experiment_d2x_onboarding=enabled"
+MAP_WIDTH = 2000
+MAP_HEIGHT = 2000
+
+REDDIT_LOGIN_GET = (
+    "https://www.reddit.com/login/?experiment_d2x_2020ify_buttons=enabled&"
+    "experiment_d2x_sso_login_link=enabled&experiment_d2x_google_sso_gis_parity=enabled&"
+    "experiment_d2x_onboarding=enabled")
 REDDIT_LOGIN_POST = "https://www.reddit.com/login"
 REDDIT_PLACE_URL = "https://www.reddit.com/r/place/"
 REDDIT_PLACE_SET_PIXEL_URL = "https://gql-realtime-2.reddit.com/query"
@@ -60,7 +65,9 @@ PLACE_WEBSOCKET = "wss://gql-realtime-2.reddit.com/query"
 BACKEND_DOMAIN = "placenl.noahvdaa.me"
 CNC_WEBSOCKET = f"wss://{BACKEND_DOMAIN}/api/ws"
 BACKEND_MAPS_URL = f"https://{BACKEND_DOMAIN}/maps"
-DEFAULT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:98.0) Gecko/20100101 Firefox/98.0"
+DEFAULT_USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:98.0) "
+                      "Gecko/20100101 "
+                      "Firefox/98.0")
 
 GRAPHQL_CANVAS_QUERY = """
 subscription replace($input: SubscribeInput!) {
@@ -148,12 +155,24 @@ csrf_regexp = re.compile(r'<input type="hidden" name="csrf_token" value="(\w+)">
 
 
 class CNCOrderClient:
-    def __init__(self, session):
+    """Client for the CNC order server."""
+
+    def __init__(self, session: aiohttp.client.ClientSession):
+        """Initialize the client
+
+        Args:
+            session (aiohttp.client.ClientSession): The session to use for
+        """
         self.session = session
         self.ws = None
         self.logger = logging.getLogger('PlaceNL.cnc')
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> CNCOrderClient:
+        """Context manager enter
+
+        Returns:
+            CNCOrderClient: The client
+        """
         self.logger.info("Connecting to Command & Control server...")
         self.ws = await self.session.ws_connect(CNC_WEBSOCKET)
         self.logger.info("Success.")
@@ -163,15 +182,20 @@ class CNCOrderClient:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit
+
+        Args:
+            exc_type (_type_): _description_
+            exc_val (_type_): _description_
+            exc_tb (_type_): _description_
+        """
         if self.ws:
-            try:
-                await self.ws.close()
-            except:
-                pass
+            await self.ws.close()
 
         self.ws = None
 
     async def ping(self):
+        """Ping the server every 5 seconds to keep the connection alive."""
         await asyncio.sleep(5)
 
         if not self.ws:
@@ -185,23 +209,30 @@ class CNCOrderClient:
 
         asyncio.get_running_loop().create_task(self.ping())
 
-    async def receive_orders(self, new_map_callback = None):
+    async def receive_orders(self, new_map_callback=None):
+        """Receive orders from the server
+
+        Args:
+            new_map_callback (_type_, optional): _description_. Defaults to None.
+        """
         if not self.ws:
             return
 
         await self.ws.send_str(json.dumps({"type": "getmap"}))
-        await self.ws.send_str(json.dumps({"type": "brand", "brand": f"PlaceNLpythonV{__version__}"}))
+        await self.ws.send_str(json.dumps({"type": "brand",
+                                           "brand": f"PlaceNLpythonV{__version__}"}))
 
         async for msg in self.ws:
             try:
                 data = json.loads(msg.data)
-            except:
+            except json.JSONDecodeError:
                 continue
 
             if data['type'] == 'map':
                 map_url = f"{BACKEND_MAPS_URL}/{data['data']}"
                 reason = data.get('reason')
-                self.logger.info("Loading new map (reason: %s)", reason if reason else "connected to server")
+                self.logger.info("Loading new map (reason: %s)", reason
+                                 if reason else "connected to server")
                 self.logger.info("Map URL: %s", map_url)
 
                 order_map = await self.load_map(map_url)
@@ -209,21 +240,40 @@ class CNCOrderClient:
                 if new_map_callback:
                     new_map_callback(order_map)
 
-    async def load_map(self, map_url):
+    async def load_map(self, map_url: str) -> np.ndarray:
+        """Load a map from the server.
+
+        Args:
+            map_url (str): The URL of the map.
+
+        Returns:
+            np.ndarray: np.ndarray of the map of shape(MAP_WIDTH, MAP_HEIGHT, 4) with the RGBA \
+                values of the pixels
+        """
         async with self.session.get(map_url) as resp:
             if resp.status != 200:
                 text = await resp.text()
-                self.logger.warning("Loading the map failed! Got HTTP response %d. Error:\n%s", resp.status, text)
+                self.logger.warning(
+                    "Loading the map failed! Got HTTP response %d. Error:\n%s", resp.status, text)
                 return
 
             data = await resp.read()
 
-            order_map = plt.imread(BytesIO(data))
-            self.logger.info("Downloaded orders map, image size: %s (dtype: %s)", order_map.shape, order_map.dtype)
+            order_template = Image.new('RGBA', (MAP_WIDTH, MAP_HEIGHT), (0, 0, 0, 0))
+            order_template.paste(Image.open(BytesIO(data)), (0, 0))
+            order_map = np.array(order_template)
+            self.logger.info("Downloaded orders map, image size: %s (dtype: %s)",
+                             order_map.shape, order_map.dtype)
 
             return order_map
 
-    async def update_pixels(self, queue, event: asyncio.Event):
+    async def update_pixels(self, queue: deque, event: asyncio.Event):
+        """Update the pixels of the map.
+
+        Args:
+            queue (deque): update queue.
+            event (asyncio.Event): __description__.
+        """
         while True:
             await event.wait()
             self.logger.info("Got new pixel event, notifying C&C server...")
@@ -238,16 +288,39 @@ class CNCOrderClient:
 
             event.clear()
 
-    async def signal_pixel_drawn(self, row, col, color):
+    async def signal_pixel_drawn(self, row: int, col: int, color: int):
+        """Signal a pixel has been drawn.
+
+        Args:
+            row (int): row of the pixel
+            col (int): column of the pixel
+            color (int): color of the pixel (0-31) see COLOR_MAPPINGS
+        """
         if not self.ws:
             return
 
-        await self.ws.send_str(json.dumps({"type": "placepixel", "x": col, "y": row, "color": color}))
-        self.logger.info("Notified CNC server of drawn pixel (%d, %d), color: %d.", col, row, color)
+        await self.ws.send_str(json.dumps({"type": "placepixel",
+                                           "x": col,
+                                           "y": row,
+                                           "color": color}))
+        self.logger.info(
+            "Notified CNC server of drawn pixel (%d, %d), color: %d.", col, row, color)
 
 
 class RedditPlaceClient:
-    def __init__(self, session, username, password, user_agent=None, debug=False):
+    """Client for the Reddit Place server."""
+
+    def __init__(self, session: aiohttp.client.ClientSession,
+                 username: str, password: str, user_agent=None, debug=False):
+        """Initialize the client.
+
+        Args:
+            session (aiohttp.client.ClientSession): __description__
+            username (str): Reddit username
+            password (str): Reddit password
+            user_agent (_type_, optional): _description_. Defaults to None.
+            debug (bool, optional): _description_. Defaults to False.
+        """
         self.session = session
         self.username = username
         self.password = password
@@ -260,7 +333,16 @@ class RedditPlaceClient:
         self.logger = logging.getLogger(f'PlaceNL.reddit.{username}')
         self.debug = debug
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> RedditPlaceClient:
+        """Context manager enter
+
+        Raises:
+            Exception: Reddit login was unsuccessful!
+            Exception: Could not obtain access token.
+
+        Returns:
+            RedditPlaceClient: self
+        """
         self.logger.info("Logging in reddit user %s...", self.username)
         success = await self.login()
 
@@ -276,16 +358,28 @@ class RedditPlaceClient:
         expires = timedelta(seconds=expires_in / 1000)
         self.access_token_expire = datetime.now() + expires
 
-        self.logger.info("Login successful, obtained access token: %s. Expires: %s (%d minutes)", self.access_token,
-                         self.access_token_expire, expires.total_seconds() // 60)
+        self.logger.info("Login successful, obtained access token: %s. Expires: %s (%d minutes)",
+                         self.access_token, self.access_token_expire,
+                         expires.total_seconds() // 60)
 
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
+        """Context manager exit
+
+        Args:
+            exc_type (_type_): _description_
+            exc (_type_): _description_
+            tb (_type_): _description_
+        """
         self.loop = None
 
     async def login(self) -> bool:
-        """Login on reddit.com using the given username and password."""
+        """Login on reddit.com using the given username and password.
+
+        Returns:
+            bool: True if login was successful, False otherwise.
+        """
 
         # First we have to obtain the form CSRF token
         headers = {
@@ -294,8 +388,9 @@ class RedditPlaceClient:
 
         async with self.session.get(REDDIT_LOGIN_GET, headers=headers) as resp:
             if resp.status != 200:
-                self.logger.error("Could not login to reddit, failed to obtain CSRF token. HTTP status: %d.",
-                                  resp.status)
+                self.logger.error(
+                    "Could not login to reddit, failed to obtain CSRF token. HTTP status: %d.",
+                    resp.status)
                 return False
 
             html = await resp.text()
@@ -331,9 +426,13 @@ class RedditPlaceClient:
     async def scrape_access_token(self) -> Optional[tuple[str, int]]:
         """Scrape a few required things from the Reddit Place page.
 
-        We need the `modhash` key (reddit's CSRF protection key) for further
+        We need the `modhash` key(reddit's CSRF protection key) for further
         requests. Furthermore, the Place page contains the websocket URL, which
-        we need to obtain updates."""
+        we need to obtain updates.
+
+        Returns:
+            Optional[tuple[str, int]]: (access_token, expires_in)
+        """
 
         async with self.session.get(REDDIT_PLACE_URL) as resp:
             if resp.status != 200:
@@ -364,7 +463,12 @@ class RedditPlaceClient:
 
             return access_token, expires_in
 
-    async def refresh_access_token(self):
+    async def refresh_access_token(self) -> bool:
+        """Refresh the access token.
+
+        Returns:
+            bool: True if refresh was successful, False otherwise.
+        """
         result = await self.scrape_access_token()
         if not result:
             self.logger.error("Could not refresh access token!")
@@ -379,7 +483,15 @@ class RedditPlaceClient:
 
         return True
 
-    async def load_canvas(self, canvas_id) -> Optional[numpy.ndarray]:
+    async def load_canvas(self, canvas_id: int) -> Optional[np.ndarray]:
+        """Load the canvas with the given ID.
+
+        Args:
+            canvas_id (int): Canvas ID
+
+        Returns:
+            Optional[np.ndarray]: Canvas image in numpy array format of shape (H, W, 4)
+        """
         if datetime.now() > self.access_token_expire:
             result = await self.refresh_access_token()
             if not result:
@@ -390,7 +502,8 @@ class RedditPlaceClient:
             "Origin": "https://hot-potato.reddit.com"
         }
 
-        async with self.session.ws_connect(PLACE_WEBSOCKET, protocols=["graphql-ws"], headers=headers) as ws:
+        async with self.session.ws_connect(PLACE_WEBSOCKET, protocols=["graphql-ws"],
+                                           headers=headers) as ws:
             await ws.send_str(json.dumps({
                 "type": "connection_init",
                 "payload": {
@@ -420,11 +533,15 @@ class RedditPlaceClient:
             async for msg in ws:
                 try:
                     data = json.loads(msg.data)
-                except:
+                except json.JSONDecodeError:
                     self.logger.debug("Couldn't parse websocket msg: %s", msg.data)
                     continue
 
-                name = data.get("payload", {}).get("data", {}).get("subscribe", {}).get("data", {}).get("name")
+                name = data.get(
+                    "payload", {}).get(
+                    "data", {}).get(
+                    "subscribe", {}).get(
+                    "data", {}).get("name")
 
                 if name:
                     self.logger.info("Found current canvas URL: %s", name)
@@ -435,38 +552,50 @@ class RedditPlaceClient:
                     async with self.session.get(f"{name}?nocache={random_str}") as resp:
                         if resp.status != 200:
                             text = await resp.text()
-                            self.logger.error("Error obtaining current canvas! HTTP Status: %d. Error:\n%s",
-                                              resp.status, text)
+                            self.logger.error(
+                                "Error obtaining current canvas! HTTP Status: %d. Error:\n%s",
+                                resp.status, text)
 
                             return
 
                         data = await resp.read()
-                        canvas = plt.imread(BytesIO(data))
-                        self.logger.info("Loaded canvas ID %d (image size: %s, dtype: %s)", canvas_id,
-                                         canvas.shape, canvas.dtype)
+                        canvas = Image.open(BytesIO(data))
+                        self.logger.info("Loaded canvas ID %d (image size: %s)",
+                                         canvas_id, canvas.size)
 
                         return canvas
 
-    async def load_full_map(self):
-        try:
-            canvas1 = await self.load_canvas(0)
-            canvas2 = await self.load_canvas(1)
-            canvas3 = await self.load_canvas(2)
-            canvas4 = await self.load_canvas(3)
+    async def load_full_map(self) -> None:
+        """Load the full map dynamically based on MAP_WIDTH and MAP_HEIGHT."""
+        current_canvas_image = Image.new('RGBA', (MAP_WIDTH, MAP_HEIGHT), (0, 0, 0, 0))
+        for i in range(MAP_HEIGHT // 1000):
+            for j in range(MAP_WIDTH // 1000):
+                map_id = (i * MAP_WIDTH // 1000) + j
+                canvas = await self.load_canvas(map_id)
+                if canvas is None:
+                    self.current_canvas = None
+                    self.logger.error("Failed to Load canvas with id %d", map_id)
+                    return
+                current_canvas_image.paste(canvas, (j * 1000, i * 1000))
 
-            if canvas1 is not None and canvas2 is not None and canvas3 is not None and canvas4 is not None:
-                top = numpy.hstack([canvas1, canvas2])
-                bottom = numpy.hstack([canvas3, canvas4])
-                self.current_canvas = numpy.vstack([top, bottom])
+        self.current_canvas = np.array(current_canvas_image.getdata())
+        self.current_canvas.resize((MAP_WIDTH, MAP_HEIGHT, 4))
 
-                self.logger.info("Loaded full canvas (shape: %s, dtype: %s)",
-                                 self.current_canvas.shape, self.current_canvas.dtype)
-        except aiohttp.ServerDisconnectedError:
-            logger.exception("Could not obtain current canvas!")
+        self.logger.info("Loaded full canvas (shape: %s, dtype: %s)",
+                         self.current_canvas.shape, self.current_canvas.dtype)
 
-    def get_pixels_to_update(self, order_map):
+    def get_pixels_to_update(self, order_map: np.ndarray) -> Optional[List[Tuple[int, int]]]:
+        """Get the pixels to update based on the order map.
+
+        Args:
+            order_map (np.ndarray): Order map, shape (MAP_WIDTH, MAP_HEIGHT, 4)
+
+        Returns:
+            Optional[List[Tuple[int, int]]]: List of pixels to update, shape (N, 2)
+        """
         if self.current_canvas is None:
-            self.logger.warning("Current canvas not yet loaded, can't figure out pending pixels...")
+            self.logger.warning(
+                "Current canvas not yet loaded, can't figure out pending pixels...")
             return
 
         to_update = []
@@ -475,7 +604,9 @@ class RedditPlaceClient:
             for col in range(order_map.shape[1]):
                 # Index 3 is alpha channel, ignore pixels set to transparent
                 if order_map[row, col, 3] != 0:
-                    if not numpy.array_equal(order_map[row, col, :3], self.current_canvas[row, col, :3]):
+                    if not np.array_equal(
+                            order_map[row, col, : 3],
+                            self.current_canvas[row, col, : 3]):
                         to_update.append((row, col))
 
         self.logger.info("Found %d pixels incorrectly colored.", len(to_update))
@@ -485,7 +616,18 @@ class RedditPlaceClient:
 
         return to_update
 
-    async def place_pixel(self, row, col, color) -> tuple[bool, float]:
+    async def place_pixel(self, row: int, col: int, color: int) -> tuple[bool, float]:
+        """Place a pixel at the given row and column.
+
+        Args:
+            row (int): Row of the pixel
+            col (int): Column of the pixel
+            color (int): Color of the pixel
+
+        Returns:
+            tuple[bool, float]: Tuple of whether the pixel was placed and the time it took to \
+                place it
+        """
         if datetime.now() > self.access_token_expire:
             result = await self.refresh_access_token()
 
@@ -534,12 +676,14 @@ class RedditPlaceClient:
             'query': SET_PIXEL_QUERY
         }
 
-        self.logger.info("Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", col, row,
-                         canvas_index, color)
+        self.logger.info(
+            "Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", col, row,
+            canvas_index, color)
 
         # Create a new session without any existing cookies
         async with aiohttp.ClientSession() as new_session:
-            async with new_session.post(REDDIT_PLACE_SET_PIXEL_URL, headers=headers, json=body) as resp:
+            async with new_session.post(REDDIT_PLACE_SET_PIXEL_URL, headers=headers,
+                                        json=body) as resp:
                 if resp.status != 200:
                     self.logger.error("Error placing pixel! HTTP status %d.", resp.status)
                     text = await resp.text()
@@ -552,8 +696,10 @@ class RedditPlaceClient:
                     errors = data.get('errors')
 
                     if errors:
-                        self.logger.error("Error placing pixel! Likely placing a new pixel too soon!")
-                        next_available = errors[0].get('extensions', {}).get('nextAvailablePixelTs')
+                        self.logger.error(
+                            "Error placing pixel! Likely placing a new pixel too soon!")
+                        next_available = errors[0].get(
+                            'extensions', {}).get('nextAvailablePixelTs')
 
                         if next_available:
                             next_dt = datetime.fromtimestamp(float(next_available) / 1000)
@@ -565,7 +711,9 @@ class RedditPlaceClient:
                         else:
                             return False, 300.0  # wait 5 minutes by default
                     else:
-                        next_available = float(data['data']['act']['data'][0]['data']['nextAvailablePixelTimestamp'])
+                        next_available = float(
+                            data['data']['act']['data'][0]['data']
+                            ['nextAvailablePixelTimestamp'])
                         next_dt = datetime.fromtimestamp(next_available / 1000)
                         delta = next_dt - datetime.now()
 
@@ -573,18 +721,29 @@ class RedditPlaceClient:
                                          next_dt, delta.total_seconds())
 
                         return True, delta.total_seconds() + random.randint(5, 60)
-                except Exception as e:
+                except json.decoder.JSONDecodeError:
                     self.logger.exception("Error placing pixel! Could not read response.")
                     return False, 60.0
 
 
-async def on_request_start(session, ctx, params):
-    logging.getLogger('aiohttp.client').debug("Making %s request to %s", params.method, params.url)
+async def on_request_start(session, ctx, params) -> None:
+    """Handle the request start event.
+
+    Args:
+        session (_type_): Session
+        ctx (_type_): _description_
+        params (_type_): _description_
+    """
+    logging.getLogger('aiohttp.client').debug(
+        "Making %s request to %s", params.method, params.url)
     logging.getLogger('aiohttp.client').debug("%s", params.headers)
 
 
 class MainRunner:
-    def __init__(self):
+    """Main runner class."""
+
+    def __init__(self) -> None:
+        """Initialize the main runner."""
         self.order_map = None
 
         self.trace_config = aiohttp.TraceConfig()
@@ -594,19 +753,23 @@ class MainRunner:
         self.pixels_to_signal = deque()
         self.debug = False
 
-    def set_debug(self):
+    def set_debug(self) -> None:
+        """Set debug mode."""
         self.debug = True
 
-    async def cnc_updater(self):
+    async def cnc_updater(self) -> None:
+        """Update the CNC."""
         while True:
             try:
-                async with aiohttp.ClientSession(trace_configs=[self.trace_config]) as cnc_session:
+                async with aiohttp.ClientSession(trace_configs=[self.trace_config]
+                                                 ) as cnc_session:
                     async with CNCOrderClient(cnc_session) as cnc_client:
                         tasks = [
-                            asyncio.get_running_loop().create_task(cnc_client.receive_orders(self.new_map_callback)),
-                            asyncio.get_running_loop().create_task(cnc_client.update_pixels(self.pixels_to_signal,
-                                                                                            self.new_pixels_event))
-                        ]
+                            asyncio.get_running_loop().create_task(
+                                cnc_client.receive_orders(self.new_map_callback)),
+                            asyncio.get_running_loop().create_task(
+                                cnc_client.update_pixels(
+                                    self.pixels_to_signal, self.new_pixels_event))]
 
                         await asyncio.gather(*tasks)
             except Exception:
@@ -616,12 +779,25 @@ class MainRunner:
 
             await asyncio.sleep(30)
 
-    def new_map_callback(self, orders):
+    def new_map_callback(self, orders: np.narray) -> None:
+        """Handle a new map callback.
+
+        Args:
+            orders (np.narray): New order map
+        """
         self.order_map = orders
 
-    async def reddit_client(self, username, password, user_agent=None):
+    async def reddit_client(self, username: str, password: str, user_agent=None) -> None:
+        """Run the reddit client.
+
+        Args:
+            username (str): Reddit username
+            password (str): Reddit password
+            user_agent (_type_, optional): _description_. Defaults to None.
+        """
         async with aiohttp.ClientSession(trace_configs=[self.trace_config]) as session:
-            async with RedditPlaceClient(session, username, password, user_agent, self.debug) as place_client:
+            async with RedditPlaceClient(session, username, password, user_agent,
+                                         self.debug) as place_client:
                 delay = 0
 
                 while True:
@@ -638,10 +814,13 @@ class MainRunner:
                         delay = 30
                     else:
                         for pixel in to_update:
-                            hex = matplotlib.colors.to_hex(self.order_map[pixel[0], pixel[1], :3]).upper()
+                            hex = '#{:02x}{:02x}{:02x}'.format(
+                                *self.order_map[pixel[0], pixel[1], :3]).upper()
+
                             color_index = COLOR_MAPPINGS[hex]
 
-                            success, delay = await place_client.place_pixel(pixel[0], pixel[1], color_index)
+                            success, delay = await place_client.place_pixel(pixel[0], pixel[1],
+                                                                            color_index)
 
                             if success:
                                 self.pixels_to_signal.append((*pixel, color_index))
@@ -650,14 +829,17 @@ class MainRunner:
                             break
 
 
-async def main():
+async def main() -> None:
+    """Main function."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '-u', '--user', nargs=2, action="append",
-        help="Reddit username and password. Use this option multiple times to run with multiple users."
+        help="Reddit username and password. Use this option multiple times to run with multiple \
+            users."
     )
-    parser.add_argument('-v', '--verbose', action='count', default=0,
-                        help="Enable verbose output, use multiple times to increase verbosity level.")
+    parser.add_argument(
+        '-v', '--verbose', action='count', default=0,
+        help="Enable verbose output, use multiple times to increase verbosity level.")
 
     args = parser.parse_args()
 
@@ -676,7 +858,6 @@ async def main():
         asyncio.get_running_loop().set_debug(True)
         logging.getLogger('aiohttp.client').setLevel(logging.DEBUG)
 
-
     tasks = [asyncio.create_task(runner.cnc_updater())]
 
     # Wait a few seconds before starting reddit clients to make sure C&C data has downloaded
@@ -688,7 +869,8 @@ async def main():
     await asyncio.gather(*tasks)
 
 
-def run():
+def run() -> None:
+    """Run the main function."""
     asyncio.run(main())
 
 
