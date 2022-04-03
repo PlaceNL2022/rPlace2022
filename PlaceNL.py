@@ -605,9 +605,8 @@ class MainRunner:
                             if success:
                                 self.pixels_to_signal.append((*pixel, color_index))
                                 self.new_pixels_event.set()
-                                break
 
-                            await asyncio.sleep(1)
+                            break
 
 
 async def main():
