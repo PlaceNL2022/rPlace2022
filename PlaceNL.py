@@ -47,7 +47,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from rich.logging import RichHandler
 
-__version__ = '1'
+__version__ = '2'
 
 logger = logging.getLogger()
 logging.basicConfig(format=r"[%(name)s] %(message)s", handlers=[RichHandler()])
