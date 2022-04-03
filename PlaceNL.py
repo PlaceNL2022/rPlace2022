@@ -43,14 +43,16 @@ from collections import deque
 
 import numpy as np
 import aiohttp
-import matplotlib
-import matplotlib.pyplot as plt
+from PIL import Image
 from rich.logging import RichHandler
 
 __version__ = '2'
 
 logger = logging.getLogger()
 logging.basicConfig(format=r"[%(name)s] %(message)s", handlers=[RichHandler()])
+
+MAP_WIDTH = 2000
+MAP_HEIGHT = 2000
 
 REDDIT_LOGIN_GET = "https://www.reddit.com/login/?experiment_d2x_2020ify_buttons=enabled&experiment_d2x_sso_login_link=enabled&experiment_d2x_google_sso_gis_parity=enabled&experiment_d2x_onboarding=enabled"
 REDDIT_LOGIN_POST = "https://www.reddit.com/login"
@@ -218,7 +220,9 @@ class CNCOrderClient:
 
             data = await resp.read()
 
-            order_map = plt.imread(BytesIO(data))
+            order_template = Image.new('RGBA', (MAP_WIDTH, MAP_HEIGHT), (0, 0, 0, 0))
+            order_template.paste(Image.open(BytesIO(data)), (0, 0))
+            order_map = np.array(order_template)
             self.logger.info("Downloaded orders map, image size: %s (dtype: %s)",
                              order_map.shape, order_map.dtype)
 
@@ -442,25 +446,26 @@ class RedditPlaceClient:
                             return
 
                         data = await resp.read()
-                        canvas = plt.imread(BytesIO(data))
-                        self.logger.info("Loaded canvas ID %d (image size: %s, dtype: %s)",
-                                         canvas_id, canvas.shape, canvas.dtype)
+                        canvas = Image.open(BytesIO(data))
+                        self.logger.info("Loaded canvas ID %d (image size: %s)",
+                                         canvas_id, canvas.size)
 
                         return canvas
 
     async def load_full_map(self):
-        canvas1 = await self.load_canvas(0)
-        canvas2 = await self.load_canvas(1)
-        canvas3 = await self.load_canvas(2)
-        canvas4 = await self.load_canvas(3)
+        current_canvas_image = Image.new('RGBA', (MAP_WIDTH, MAP_HEIGHT), (0, 0, 0, 0))
+        for i in range(MAP_HEIGHT // 1000):
+            for j in range(MAP_WIDTH // 1000):
+                map_id = (i * MAP_WIDTH // 1000) + j
 
-        if canvas1 is not None and canvas2 is not None and canvas3 is not None and canvas4 is not None:
-            top = np.hstack([canvas1, canvas2])
-            bottom = np.hstack([canvas3, canvas4])
-            self.current_canvas = np.vstack([top, bottom])
+                canvas = await self.load_canvas(map_id)
+                current_canvas_image.paste(canvas, (j * 1000, i * 1000))
 
-            self.logger.info("Loaded full canvas (shape: %s, dtype: %s)",
-                             self.current_canvas.shape, self.current_canvas.dtype)
+        self.current_canvas = np.array(current_canvas_image.getdata())
+        self.current_canvas.resize((MAP_WIDTH, MAP_HEIGHT, 4))
+
+        self.logger.info("Loaded full canvas (shape: %s, dtype: %s)",
+                         self.current_canvas.shape, self.current_canvas.dtype)
 
     def get_pixels_to_update(self, order_map):
         if self.current_canvas is None:
@@ -641,8 +646,9 @@ class MainRunner:
                         delay = 30
                     else:
                         for pixel in to_update:
-                            hex = matplotlib.colors.to_hex(
-                                self.order_map[pixel[0], pixel[1], :3]).upper()
+                            hex = '#{:02x}{:02x}{:02x}'.format(
+                                *self.order_map[pixel[0], pixel[1], :3]).upper()
+
                             color_index = COLOR_MAPPINGS[hex]
 
                             success, delay = await place_client.place_pixel(pixel[0], pixel[1], color_index)
