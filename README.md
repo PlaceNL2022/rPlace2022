@@ -19,25 +19,24 @@ For now, just download the script and run it with Python. More easy installation
 ## Usage
 
 ```bash
-python PlaceNL.py -u "USERNAME" "PASSWORD"
+
+PlaceNL.py -u "USERNAME" "PASSWORD"
 ```
+
 
 The bot supports multiple users:
 
 ```bash
-PlaceNL -u "USERNAME1" "PASSWORD1" -u "USERNAME2" "PASSWORD2"
+PlaceNL -u 'USERNAME1' 'PASSWORD1' -u 'USERNAME2' 'PASSWORD2'
 ```
 
-**IMPORTANT**: Do you have a $ in your password? Please escape it as follows:
-
-```bash
-PlaceNL -u "USERNAME" "PA\$\$WORD"
-```
+**IMPORTANT**: Use single quotes, otherwise your shell might interpret special characters.
 
 ## Docker image
 
 For people experienced with Docker, there's also a docker image you can run:
 
 ```bash
-python PlaceNL.py -u "USERNAME1" "PASSWORD1" -u "USERNAME2" "PASSWORD2"
+docker run -t ghcr.io/placenl/placenl-python -u 'USERNAME' 'PASSWORD'
+
 ```
