@@ -21,7 +21,7 @@ pip install --force git+https://github.com/PlaceNL/rPlace2022.git
 ## Usage
 
 ```bash
-PlaceNL -u "USERNAME" "PASSWORD"
+PlaceNL -u 'USERNAME' 'PASSWORD'
 ```
 
 The bot supports multiple users:
