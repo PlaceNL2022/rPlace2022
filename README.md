@@ -26,19 +26,15 @@ PlaceNL -u "USERNAME" "PASSWORD"
 
 The bot supports multiple users:
 ```bash
-PlaceNL -u "USERNAME1" "PASSWORD1" -u "USERNAME2" "PASSWORD2"
+PlaceNL -u 'USERNAME1' 'PASSWORD1' -u 'USERNAME2' 'PASSWORD2'
 ```
 
-**IMPORTANT**: Do you have a $ in your password? Please escape it as follows:
-
-```bash
-PlaceNL -u "USERNAME" "PA\$\$WORD"
-```
+**IMPORTANT**: Use single quotes, otherwise your shell might interpret special characters.
 
 ## Docker image
 
 For people experienced with Docker, there's also a docker image you can run:
 
 ```bash
-docker run -t ghcr.io/placenl/placenl-python -u "USERNAME" "PASSWORD"
+docker run -t ghcr.io/placenl/placenl-python -u 'USERNAME' 'PASSWORD'
 ```
