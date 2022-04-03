@@ -41,7 +41,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from collections import deque
 
-import numpy
+import numpy as np
 import aiohttp
 import matplotlib
 import matplotlib.pyplot as plt
@@ -183,7 +183,7 @@ class CNCOrderClient:
 
         asyncio.get_running_loop().create_task(self.ping())
 
-    async def receive_orders(self, new_map_callback = None):
+    async def receive_orders(self, new_map_callback=None):
         if not self.ws:
             return
 
@@ -199,7 +199,8 @@ class CNCOrderClient:
             if data['type'] == 'map':
                 map_url = f"https://placenl.noahvdaa.me/maps/{data['data']}"
                 reason = data.get('reason')
-                self.logger.info("Loading new map (reason: %s)", reason if reason else "connected to server")
+                self.logger.info("Loading new map (reason: %s)", reason
+                                 if reason else "connected to server")
                 self.logger.info("Map URL: %s", map_url)
 
                 order_map = await self.load_map(map_url)
@@ -211,13 +212,15 @@ class CNCOrderClient:
         async with self.session.get(map_url) as resp:
             if resp.status != 200:
                 text = await resp.text()
-                self.logger.warning("Loading the map failed! Got HTTP response %d. Error:\n%s", resp.status, text)
+                self.logger.warning(
+                    "Loading the map failed! Got HTTP response %d. Error:\n%s", resp.status, text)
                 return
 
             data = await resp.read()
 
             order_map = plt.imread(BytesIO(data))
-            self.logger.info("Downloaded orders map, image size: %s (dtype: %s)", order_map.shape, order_map.dtype)
+            self.logger.info("Downloaded orders map, image size: %s (dtype: %s)",
+                             order_map.shape, order_map.dtype)
 
             return order_map
 
@@ -241,7 +244,8 @@ class CNCOrderClient:
             return
 
         await self.ws.send_str(json.dumps({"type": "placepixel", "x": col, "y": row, "color": color}))
-        self.logger.info("Notified CNC server of drawn pixel (%d, %d), color: %d.", row, col, color)
+        self.logger.info(
+            "Notified CNC server of drawn pixel (%d, %d), color: %d.", row, col, color)
 
 
 class RedditPlaceClient:
@@ -273,8 +277,8 @@ class RedditPlaceClient:
         expires = timedelta(seconds=expires_in / 1000)
         self.access_token_expire = datetime.now() + expires
 
-        self.logger.info("Login successful, obtained access token: %s. Expires: %s (%d minutes)", self.access_token,
-                         self.access_token_expire, expires.total_seconds() // 60)
+        self.logger.info("Login successful, obtained access token: %s. Expires: %s (%d minutes)",
+                         self.access_token, self.access_token_expire, expires.total_seconds() // 60)
 
         return self
 
@@ -291,8 +295,9 @@ class RedditPlaceClient:
 
         async with self.session.get(REDDIT_LOGIN_GET, headers=headers) as resp:
             if resp.status != 200:
-                self.logger.error("Could not login to reddit, failed to obtain CSRF token. HTTP status: %d.",
-                                  resp.status)
+                self.logger.error(
+                    "Could not login to reddit, failed to obtain CSRF token. HTTP status: %d.",
+                    resp.status)
                 return False
 
             html = await resp.text()
@@ -370,7 +375,7 @@ class RedditPlaceClient:
 
         return True
 
-    async def load_canvas(self, canvas_id) -> Optional[numpy.ndarray]:
+    async def load_canvas(self, canvas_id) -> Optional[np.ndarray]:
         if datetime.now() > self.access_token_expire:
             result = await self.refresh_access_token()
             if not result:
@@ -415,7 +420,11 @@ class RedditPlaceClient:
                     self.logger.debug("Couldn't parse websocket msg: %s", msg.data)
                     continue
 
-                name = data.get("payload", {}).get("data", {}).get("subscribe", {}).get("data", {}).get("name")
+                name = data.get(
+                    "payload", {}).get(
+                    "data", {}).get(
+                    "subscribe", {}).get(
+                    "data", {}).get("name")
 
                 if name:
                     self.logger.info("Found current canvas URL: %s", name)
@@ -426,15 +435,16 @@ class RedditPlaceClient:
                     async with self.session.get(f"{name}?nocache={random_str}") as resp:
                         if resp.status != 200:
                             text = await resp.text()
-                            self.logger.error("Error obtaining current canvas! HTTP Status: %d. Error:\n%s",
-                                              resp.status, text)
+                            self.logger.error(
+                                "Error obtaining current canvas! HTTP Status: %d. Error:\n%s",
+                                resp.status, text)
 
                             return
 
                         data = await resp.read()
                         canvas = plt.imread(BytesIO(data))
-                        self.logger.info("Loaded canvas ID %d (image size: %s, dtype: %s)", canvas_id,
-                                         canvas.shape, canvas.dtype)
+                        self.logger.info("Loaded canvas ID %d (image size: %s, dtype: %s)",
+                                         canvas_id, canvas.shape, canvas.dtype)
 
                         return canvas
 
@@ -445,16 +455,17 @@ class RedditPlaceClient:
         canvas4 = await self.load_canvas(3)
 
         if canvas1 is not None and canvas2 is not None and canvas3 is not None and canvas4 is not None:
-            top = numpy.hstack([canvas1, canvas2])
-            bottom = numpy.hstack([canvas3, canvas4])
-            self.current_canvas = numpy.vstack([top, bottom])
+            top = np.hstack([canvas1, canvas2])
+            bottom = np.hstack([canvas3, canvas4])
+            self.current_canvas = np.vstack([top, bottom])
 
             self.logger.info("Loaded full canvas (shape: %s, dtype: %s)",
                              self.current_canvas.shape, self.current_canvas.dtype)
 
     def get_pixels_to_update(self, order_map):
         if self.current_canvas is None:
-            self.logger.warning("Current canvas not yet loaded, can't figure out pending pixels...")
+            self.logger.warning(
+                "Current canvas not yet loaded, can't figure out pending pixels...")
             return
 
         to_update = []
@@ -463,7 +474,9 @@ class RedditPlaceClient:
             for col in range(order_map.shape[1]):
                 # Index 3 is alpha channel, ignore pixels set to transparent
                 if order_map[row, col, 3] != 0:
-                    if not numpy.array_equal(order_map[row, col, :3], self.current_canvas[row, col, :3]):
+                    if not np.array_equal(
+                            order_map[row, col, : 3],
+                            self.current_canvas[row, col, : 3]):
                         to_update.append((row, col))
 
         self.logger.info("Found %d pixels incorrectly colored.", len(to_update))
@@ -522,8 +535,9 @@ class RedditPlaceClient:
             'query': SET_PIXEL_QUERY
         }
 
-        self.logger.info("Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", row, col,
-                         canvas_index, color)
+        self.logger.info(
+            "Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", row, col,
+            canvas_index, color)
 
         # Create a new session without any existing cookies
         async with aiohttp.ClientSession() as new_session:
@@ -540,8 +554,10 @@ class RedditPlaceClient:
                     errors = data.get('errors')
 
                     if errors:
-                        self.logger.error("Error placing pixel! Likely placing a new pixel too soon!")
-                        next_available = errors[0].get('extensions', {}).get('nextAvailablePixelTs')
+                        self.logger.error(
+                            "Error placing pixel! Likely placing a new pixel too soon!")
+                        next_available = errors[0].get(
+                            'extensions', {}).get('nextAvailablePixelTs')
 
                         if next_available:
                             next_dt = datetime.fromtimestamp(float(next_available) / 1000)
@@ -553,7 +569,9 @@ class RedditPlaceClient:
                         else:
                             return False, 300.0  # wait 5 minutes by default
                     else:
-                        next_available = float(data['data']['act']['data'][0]['data']['nextAvailablePixelTimestamp'])
+                        next_available = float(
+                            data['data']['act']['data'][0]['data']
+                            ['nextAvailablePixelTimestamp'])
                         next_dt = datetime.fromtimestamp(next_available / 1000)
                         delta = next_dt - datetime.now()
 
@@ -587,10 +605,11 @@ class MainRunner:
                 async with aiohttp.ClientSession(trace_configs=[self.trace_config]) as cnc_session:
                     async with CNCOrderClient(cnc_session) as cnc_client:
                         tasks = [
-                            asyncio.get_running_loop().create_task(cnc_client.receive_orders(self.new_map_callback)),
-                            asyncio.get_running_loop().create_task(cnc_client.update_pixels(self.pixels_to_signal,
-                                                                                            self.new_pixels_event))
-                        ]
+                            asyncio.get_running_loop().create_task(
+                                cnc_client.receive_orders(self.new_map_callback)),
+                            asyncio.get_running_loop().create_task(
+                                cnc_client.update_pixels(
+                                    self.pixels_to_signal, self.new_pixels_event))]
 
                         await asyncio.gather(*tasks)
             except Exception:
@@ -622,7 +641,8 @@ class MainRunner:
                         delay = 30
                     else:
                         for pixel in to_update:
-                            hex = matplotlib.colors.to_hex(self.order_map[pixel[0], pixel[1], :3]).upper()
+                            hex = matplotlib.colors.to_hex(
+                                self.order_map[pixel[0], pixel[1], :3]).upper()
                             color_index = COLOR_MAPPINGS[hex]
 
                             success, delay = await place_client.place_pixel(pixel[0], pixel[1], color_index)
@@ -640,8 +660,9 @@ async def main():
         '-u', '--user', nargs=2, action="append",
         help="Reddit username and password. Use this option multiple times to run with multiple users."
     )
-    parser.add_argument('-v', '--verbose', action='count', default=0,
-                        help="Enable verbose output, use multiple times to increase verbosity level.")
+    parser.add_argument(
+        '-v', '--verbose', action='count', default=0,
+        help="Enable verbose output, use multiple times to increase verbosity level.")
 
     args = parser.parse_args()
 
