@@ -250,12 +250,8 @@ class CNCOrderClient:
             return
 
         await self.ws.send_str(json.dumps({"type": "placepixel", "x": col, "y": row, "color": color}))
-<<<<<<< HEAD
         self.logger.info(
             "Notified CNC server of drawn pixel (%d, %d), color: %d.", col, row, color)
-=======
-        self.logger.info("Notified CNC server of drawn pixel (%d, %d), color: %d.", col, row, color)
->>>>>>> b0af102e0571d43ee109201d6664e4cb05efbc7c
 
 
 class RedditPlaceClient:
@@ -546,58 +542,59 @@ class RedditPlaceClient:
             'query': SET_PIXEL_QUERY
         }
 
-<<<<<<< HEAD
-        self.logger.info(
-            "Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", col, row,
-            canvas_index, color)
-=======
-        self.logger.info("Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", col, row,
-                         canvas_index, color)
->>>>>>> b0af102e0571d43ee109201d6664e4cb05efbc7c
 
-        # Create a new session without any existing cookies
-        async with aiohttp.ClientSession() as new_session:
-            async with new_session.post(REDDIT_PLACE_SET_PIXEL_URL, headers=headers, json=body) as resp:
-                if resp.status != 200:
-                    self.logger.error("Error placing pixel! HTTP status %d.", resp.status)
-                    text = await resp.text()
-                    self.logger.error("%s", text)
+<< << << < HEAD
+ self.logger.info(
+      "Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", col, row,
+      canvas_index, color)
+== == == =
+ self.logger.info("Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", col, row,
+                   canvas_index, color)
+>>>>>> > b0af102e0571d43ee109201d6664e4cb05efbc7c
 
-                    return False, 60.0
+ # Create a new session without any existing cookies
+ async with aiohttp.ClientSession() as new_session:
+      async with new_session.post(REDDIT_PLACE_SET_PIXEL_URL, headers=headers, json=body) as resp:
+           if resp.status != 200:
+                self.logger.error("Error placing pixel! HTTP status %d.", resp.status)
+                text = await resp.text()
+                self.logger.error("%s", text)
 
-                try:
-                    data = await resp.json()
-                    errors = data.get('errors')
+                return False, 60.0
 
-                    if errors:
-                        self.logger.error(
-                            "Error placing pixel! Likely placing a new pixel too soon!")
-                        next_available = errors[0].get(
-                            'extensions', {}).get('nextAvailablePixelTs')
+            try:
+                data = await resp.json()
+                errors = data.get('errors')
 
-                        if next_available:
-                            next_dt = datetime.fromtimestamp(float(next_available) / 1000)
-                            delta = next_dt - datetime.now()
-                            self.logger.info("Next available possibility: %s (%d seconds)",
-                                             next_dt, delta.total_seconds())
+                if errors:
+                    self.logger.error(
+                        "Error placing pixel! Likely placing a new pixel too soon!")
+                    next_available = errors[0].get(
+                        'extensions', {}).get('nextAvailablePixelTs')
 
-                            return False, delta.total_seconds() + random.randint(5, 60)
-                        else:
-                            return False, 300.0  # wait 5 minutes by default
-                    else:
-                        next_available = float(
-                            data['data']['act']['data'][0]['data']
-                            ['nextAvailablePixelTimestamp'])
-                        next_dt = datetime.fromtimestamp(next_available / 1000)
+                    if next_available:
+                        next_dt = datetime.fromtimestamp(float(next_available) / 1000)
                         delta = next_dt - datetime.now()
-
-                        self.logger.info("Success! Next pixel will be set at %s (%d seconds)",
+                        self.logger.info("Next available possibility: %s (%d seconds)",
                                          next_dt, delta.total_seconds())
 
-                        return True, delta.total_seconds() + random.randint(5, 60)
-                except Exception as e:
-                    self.logger.exception("Error placing pixel! Could not read response.")
-                    return False, 60.0
+                        return False, delta.total_seconds() + random.randint(5, 60)
+                    else:
+                        return False, 300.0  # wait 5 minutes by default
+                else:
+                    next_available = float(
+                        data['data']['act']['data'][0]['data']
+                        ['nextAvailablePixelTimestamp'])
+                    next_dt = datetime.fromtimestamp(next_available / 1000)
+                    delta = next_dt - datetime.now()
+
+                    self.logger.info("Success! Next pixel will be set at %s (%d seconds)",
+                                     next_dt, delta.total_seconds())
+
+                    return True, delta.total_seconds() + random.randint(5, 60)
+            except Exception as e:
+                self.logger.exception("Error placing pixel! Could not read response.")
+                return False, 60.0
 
 
 async def on_request_start(session, ctx, params):
