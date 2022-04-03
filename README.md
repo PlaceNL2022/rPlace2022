@@ -12,10 +12,10 @@ and automatically place pixels at the desired locations.
 - Rich
 - aiohttp
 
-## Installation
+## Installation & updating to a new version
 
 ```bash
-pip install https://github.com/PlaceNL/rPlace2022
+pip install --force https://github.com/PlaceNL/rPlace2022
 ```
 
 ## Usage
