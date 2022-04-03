@@ -247,7 +247,7 @@ class CNCOrderClient:
 
 
 class RedditPlaceClient:
-    def __init__(self, session, username, password, user_agent=None):
+    def __init__(self, session, username, password, user_agent=None, debug=False):
         self.session = session
         self.username = username
         self.password = password
@@ -258,6 +258,7 @@ class RedditPlaceClient:
         self.current_canvas = None
 
         self.logger = logging.getLogger(f'PlaceNL.reddit.{username}')
+        self.debug = debug
 
     async def __aenter__(self):
         self.logger.info("Logging in reddit user %s...", self.username)
@@ -340,6 +341,12 @@ class RedditPlaceClient:
                 return
 
             data = await resp.text()
+
+            if self.debug:
+                fname = f"place_access_token_{self.username}.html"
+                logger.debug("Writing HTML to %s", fname)
+                with open(fname, "w") as o:
+                    o.write(data)
 
             access_token_matches = access_token_regexp.search(data)
             expires_in_matches = expires_in_regexp.search(data)
@@ -582,6 +589,10 @@ class MainRunner:
 
         self.new_pixels_event = asyncio.Event()
         self.pixels_to_signal = deque()
+        self.debug = False
+
+    def set_debug(self):
+        self.debug = True
 
     async def cnc_updater(self):
         while True:
@@ -607,7 +618,7 @@ class MainRunner:
 
     async def reddit_client(self, username, password, user_agent=None):
         async with aiohttp.ClientSession(trace_configs=[self.trace_config]) as session:
-            async with RedditPlaceClient(session, username, password, user_agent) as place_client:
+            async with RedditPlaceClient(session, username, password, user_agent, self.debug) as place_client:
                 delay = 0
 
                 while True:
@@ -650,7 +661,10 @@ async def main():
     logging.getLogger().setLevel(logging.INFO)
     logging.getLogger('PIL').setLevel(logging.INFO)
 
+    runner = MainRunner()
+
     if args.verbose > 0:
+        runner.set_debug()
         logging.getLogger().setLevel(logging.DEBUG)
         logging.getLogger('aiohttp.client').setLevel(logging.INFO)
 
@@ -659,7 +673,7 @@ async def main():
         asyncio.get_running_loop().set_debug(True)
         logging.getLogger('aiohttp.client').setLevel(logging.DEBUG)
 
-    runner = MainRunner()
+
     tasks = [asyncio.create_task(runner.cnc_updater())]
 
     # Wait a few seconds before starting reddit clients to make sure C&C data has downloaded
