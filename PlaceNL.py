@@ -480,8 +480,6 @@ class RedditPlaceClient:
             if not result:
                 return False, 60.0
 
-        self.logger.info("Attempting to place a pixel at (%d, %d) with color %d...", row, col, color)
-
         headers = {
             'Accept': '*/*',
             'Connection': 'close',
@@ -523,6 +521,9 @@ class RedditPlaceClient:
             },
             'query': SET_PIXEL_QUERY
         }
+
+        self.logger.info("Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", row, col,
+                         canvas_index, color)
 
         # Create a new session without any existing cookies
         async with aiohttp.ClientSession() as new_session:
