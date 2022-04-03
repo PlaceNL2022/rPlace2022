@@ -1,0 +1,6 @@
+build
+dist
+.eggs
+*.egg-info
+.git
+.gitignore
