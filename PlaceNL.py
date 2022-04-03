@@ -249,7 +249,7 @@ class CNCOrderClient:
 
         await self.ws.send_str(json.dumps({"type": "placepixel", "x": col, "y": row, "color": color}))
         self.logger.info(
-            "Notified CNC server of drawn pixel (%d, %d), color: %d.", row, col, color)
+            "Notified CNC server of drawn pixel (%d, %d), color: %d.", col, row, color)
 
 
 class RedditPlaceClient:
@@ -541,7 +541,7 @@ class RedditPlaceClient:
         }
 
         self.logger.info(
-            "Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", row, col,
+            "Attempting to place a pixel at (%d, %d) (canvas: %d), with color %d...", col, row,
             canvas_index, color)
 
         # Create a new session without any existing cookies
