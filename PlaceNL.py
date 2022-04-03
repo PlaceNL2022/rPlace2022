@@ -349,7 +349,7 @@ class RedditPlaceClient:
     async def refresh_access_token(self):
         result = await self.scrape_access_token()
         if not result:
-            self.logger.error("Could not refresh access token, trying again in one minute")
+            self.logger.error("Could not refresh access token!")
             return False
 
         self.access_token, expires_in = result
@@ -432,9 +432,13 @@ class RedditPlaceClient:
     async def load_full_map(self):
         canvas1 = await self.load_canvas(0)
         canvas2 = await self.load_canvas(1)
+        canvas3 = await self.load_canvas(2)
+        canvas4 = await self.load_canvas(3)
 
-        if canvas1 is not None and canvas2 is not None:
-            self.current_canvas = numpy.hstack([canvas1, canvas2])
+        if canvas1 is not None and canvas2 is not None and canvas3 is not None and canvas4 is not None:
+            top = numpy.hstack([canvas1, canvas2])
+            bottom = numpy.hstack([canvas3, canvas4])
+            self.current_canvas = numpy.vstack([top, bottom])
 
             self.logger.info("Loaded full canvas (shape: %s, dtype: %s)",
                              self.current_canvas.shape, self.current_canvas.dtype)
