@@ -5,3 +5,4 @@ dist
 .eggs
 __pycache__
 run_bot.sh
+config.toml

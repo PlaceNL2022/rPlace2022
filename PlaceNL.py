@@ -41,6 +41,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from collections import deque
 
+import tomli
 import numpy
 import aiohttp
 import matplotlib
@@ -60,7 +61,24 @@ PLACE_WEBSOCKET = "wss://gql-realtime-2.reddit.com/query"
 BACKEND_DOMAIN = "placenl.noahvdaa.me"
 CNC_WEBSOCKET = f"wss://{BACKEND_DOMAIN}/api/ws"
 BACKEND_MAPS_URL = f"https://{BACKEND_DOMAIN}/maps"
+
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:98.0) Gecko/20100101 Firefox/98.0"
+USER_AGENTS = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:98.0) Gecko/20100101 Firefox/98.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.84 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:99.0) Gecko/20100101 Firefox/99.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.60 Safari/537.36 Edg/100.0.1185.29",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_3_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.3 Safari/605.1.15",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 12.3; rv:98.0) Gecko/20100101 Firefox/98.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_3_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.60 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.60 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.3 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:98.0) Gecko/20100101 Firefox/98.0",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:98.0) Gecko/20100101 Firefox/98.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.60 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.141 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_3_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.60 Safari/537.36 Edg/99.0.1150.36"
+]
 
 GRAPHQL_CANVAS_QUERY = """
 subscription replace($input: SubscribeInput!) {
@@ -620,6 +638,9 @@ class MainRunner:
         self.order_map = orders
 
     async def reddit_client(self, username, password, user_agent=None):
+        if user_agent is None:
+            user_agent = random.choice(USER_AGENTS)
+
         async with aiohttp.ClientSession(trace_configs=[self.trace_config]) as session:
             async with RedditPlaceClient(session, username, password, user_agent, self.debug) as place_client:
                 delay = 0
@@ -656,6 +677,10 @@ async def main():
         '-u', '--user', nargs=2, action="append",
         help="Reddit username and password. Use this option multiple times to run with multiple users."
     )
+    parser.add_argument(
+        '-c', '--from-config', type=argparse.FileType("rb"), required=False, default=None,
+        help="Specify a path to a TOML config file describing account details."
+    )
     parser.add_argument('-v', '--verbose', action='count', default=0,
                         help="Enable verbose output, use multiple times to increase verbosity level.")
 
@@ -681,7 +706,16 @@ async def main():
     # Wait a few seconds before starting reddit clients to make sure C&C data has downloaded
     await asyncio.sleep(5)
 
-    for username, password in args.user:
+    users = list(args.user)
+
+    if args.from_config:
+        config = tomli.load(args.from_config)
+        config_users = [(u['username'], u['password']) for u in config.get('users', [])
+                        if u.get('username') and u.get('password')]
+
+        users.extend(config_users)
+
+    for username, password in users:
         tasks.append(runner.reddit_client(username, password))
 
     await asyncio.gather(*tasks)

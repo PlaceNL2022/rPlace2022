@@ -23,7 +23,7 @@ pip install --force git+https://github.com/PlaceNL/rPlace2022.git
 For people experienced with Docker, there's also a docker image you can run:
 
 ```bash
-docker run --pull=always ghcr.io/placenl/placenl-python -u 'USERNAME' 'PASSWORD'
+docker run --pull=always --restart unless-stopped ghcr.io/placenl/placenl-python -u 'USERNAME' 'PASSWORD'
 ```
 
 ## Usage
@@ -44,8 +44,25 @@ interpret special characters.
 
 ### Windows
 
-On Windows, docker is probably the easiest way. Install 
-[Docker Desktop](https://docs.docker.com/desktop/windows/install/), and pull and
-run our docker image as described above (open CMD.exe or PowerShell for that).
+On Windows, docker is probably the easiest way. 
 
-**IMPORTANT**: On windows, single quotes are not supported, so use double quotes.
+1. Install [Docker Desktop](https://docs.docker.com/desktop/windows/install/).
+2. Docker requires Windows Subsystem for Linux, so install that too.
+3. Open PowerShell and run the above listed Docker command, but use double quotes instead of 
+   single quotes.
+   
+   ```bash
+   docker run --pull=always --restart unless-stopped ghcr.io/placenl/placenl-python -u "USERNAME" "PASSWORD"
+   ```
+4. It should be up and running! It will also automatically restart in case of a rare crash.
+
+### Specifying users in a config file
+
+Besides specifying the username and password combinations on the command line, it's also possible to specify them
+in a TOML config file. TOML is an INI-like file format, see the `config-example.toml` for an example.
+
+To specify the path to the config file, add the `--from-config` flag (shorthand: `-c`):
+
+```bash
+PlaceNL --from-config config.toml
+```
