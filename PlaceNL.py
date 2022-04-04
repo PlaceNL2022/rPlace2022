@@ -189,8 +189,10 @@ class CNCOrderClient:
         if self.ws:
             try:
                 await self.ws.close()
+            except Exception as e:
+                logger.error('Something happened in __aexit__ :', e)
+                pass
             except:
-                print('Something happened in __aexit__')
                 pass
 
         self.ws = None
@@ -683,7 +685,7 @@ class MainRunner:
 
                                 break
             except LoginError:
-                print('Login error with', username, 'moving on...')
+                logging.error('Login error with', username, 'moving on...')
 
 
 async def main():
