@@ -48,7 +48,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from rich.logging import RichHandler
 
-__version__ = '2'
+__version__ = '3'
 
 logger = logging.getLogger()
 logging.basicConfig(format=r"[%(name)s] %(message)s", handlers=[RichHandler()])
@@ -198,7 +198,7 @@ class CNCOrderClient:
         try:
             await self.ws.send_str(json.dumps({"type": "ping"}))
         except ConnectionResetError:
-            self.logger.exception("Could not send ping, websocket closed?")
+            self.logger.warning("Could not send ping, websocket closed?")
             self.ws = None
 
         asyncio.get_running_loop().create_task(self.ping())
@@ -224,14 +224,13 @@ class CNCOrderClient:
 
                 order_map = await self.load_map(map_url)
 
-                if new_map_callback:
+                if order_map is not None and new_map_callback is not None:
                     new_map_callback(order_map)
 
     async def load_map(self, map_url) -> Optional[numpy.ndarray]:
         async with self.session.get(map_url) as resp:
             if resp.status != 200:
-                text = await resp.text()
-                self.logger.warning("Loading the map failed! Got HTTP response %d. Error:\n%s", resp.status, text)
+                self.logger.warning("Loading the map failed! Got HTTP response %d.", resp.status)
                 return
 
             data = await resp.read()
@@ -483,6 +482,9 @@ class RedditPlaceClient:
             logger.exception("Could not obtain current canvas!")
 
     def get_pixels_to_update(self, order_map) -> list:
+        if order_map is None:
+            return []
+
         if self.current_canvas is None:
             self.logger.warning("Current canvas not yet loaded, can't figure out pending pixels...")
             return []
@@ -655,8 +657,8 @@ class MainRunner:
                     to_update = place_client.get_pixels_to_update(self.order_map)
 
                     if len(to_update) == 0:
-                        # No pixels to update, try again in 30 seconds
-                        delay = 30
+                        # No pixels to update, try again in 60 seconds
+                        delay = 60
                     else:
                         for pixel in to_update:
                             hex = matplotlib.colors.to_hex(self.order_map[pixel[0], pixel[1], :3]).upper()

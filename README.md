@@ -11,6 +11,7 @@ and automatically place pixels at the desired locations.
 - Matplotlib
 - Rich
 - aiohttp
+- tomli
 
 ## Installation & updating to a new version
 
@@ -55,7 +56,7 @@ On Windows, docker is probably the easiest way.
    single quotes (or specify a path to a config file, described below).
    
    ```bash
-   docker run --pull=always --restart unless-stopped ghcr.io/placenl/placenl-python -u "USERNAME" "PASSWORD"
+   docker run -t --pull=always --restart unless-stopped ghcr.io/placenl/placenl-python -u "USERNAME" "PASSWORD"
    ```
 5. It should be up and running! It will also automatically restart in case of a rare crash.
 
