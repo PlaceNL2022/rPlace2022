@@ -6,7 +6,7 @@ and automatically place pixels at the desired locations.
 
 ## Requirements
 
-- Python >= 3.8
+- Python >= 3.8 (& pip!)
 - NumPy
 - Matplotlib
 - Rich
