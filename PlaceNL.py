@@ -185,7 +185,7 @@ class CNCOrderClient:
 
         asyncio.get_running_loop().create_task(self.ping())
 
-    async def receive_orders(self, new_map_callback = None):
+    async def receive_orders(self, new_map_callback=None):
         if not self.ws:
             return
 
@@ -209,7 +209,7 @@ class CNCOrderClient:
                 if new_map_callback:
                     new_map_callback(order_map)
 
-    async def load_map(self, map_url):
+    async def load_map(self, map_url) -> Optional[numpy.ndarray]:
         async with self.session.get(map_url) as resp:
             if resp.status != 200:
                 text = await resp.text()
@@ -260,7 +260,7 @@ class RedditPlaceClient:
         self.logger = logging.getLogger(f'PlaceNL.reddit.{username}')
         self.debug = debug
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> RedditPlaceClient:
         self.logger.info("Logging in reddit user %s...", self.username)
         success = await self.login()
 
@@ -364,7 +364,7 @@ class RedditPlaceClient:
 
             return access_token, expires_in
 
-    async def refresh_access_token(self):
+    async def refresh_access_token(self) -> bool:
         result = await self.scrape_access_token()
         if not result:
             self.logger.error("Could not refresh access token!")
@@ -464,10 +464,10 @@ class RedditPlaceClient:
         except aiohttp.ServerDisconnectedError:
             logger.exception("Could not obtain current canvas!")
 
-    def get_pixels_to_update(self, order_map):
+    def get_pixels_to_update(self, order_map) -> list:
         if self.current_canvas is None:
             self.logger.warning("Current canvas not yet loaded, can't figure out pending pixels...")
-            return
+            return []
 
         to_update = []
 
@@ -675,7 +675,6 @@ async def main():
         warnings.filterwarnings("always", category=ResourceWarning)
         asyncio.get_running_loop().set_debug(True)
         logging.getLogger('aiohttp.client').setLevel(logging.DEBUG)
-
 
     tasks = [asyncio.create_task(runner.cnc_updater())]
 
