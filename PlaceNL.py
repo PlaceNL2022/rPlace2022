@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 Headless reddit /r/place 2022 updater.
 
@@ -7,6 +9,7 @@ reddit accounts and automatically obtains and refreshed access tokens.
 
 Authors:
 - /u/tr4ce
+- tintin10q
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -164,6 +167,8 @@ access_token_regexp = re.compile(r'"accessToken":"([a-zA-Z0-9\-_]+)"')
 expires_in_regexp = re.compile(r'"expiresIn":(\d+)')
 csrf_regexp = re.compile(r'<input type="hidden" name="csrf_token" value="(\w+)">')
 
+class LoginError(Exception):
+    pass
 
 class CNCOrderClient:
     def __init__(self, session):
@@ -185,6 +190,7 @@ class CNCOrderClient:
             try:
                 await self.ws.close()
             except:
+                print('Something happened in __aexit__')
                 pass
 
         self.ws = None
@@ -282,12 +288,12 @@ class RedditPlaceClient:
         success = await self.login()
 
         if not success:
-            raise Exception("Reddit login was unsuccessful!")
+            raise LoginError("Reddit login was unsuccessful!")
 
         result = await self.scrape_access_token()
 
         if not result:
-            raise Exception("Could not obtain access token.")
+            raise LoginError("Could not obtain access token.")
 
         self.access_token, expires_in = result
         expires = timedelta(seconds=expires_in / 1000)
@@ -323,6 +329,10 @@ class RedditPlaceClient:
             except IndexError:
                 self.logger.error("Could not login to reddit, failed to obtain CSRF token.")
                 return False
+            except LoginError:
+                self.logger.error("Could not login to reddit, failed to obtain CSRF token.")
+                return False
+
 
         post_data = {
             'csrf_token': csrf_token,
@@ -644,33 +654,36 @@ class MainRunner:
             user_agent = random.choice(USER_AGENTS)
 
         async with aiohttp.ClientSession(trace_configs=[self.trace_config]) as session:
-            async with RedditPlaceClient(session, username, password, user_agent, self.debug) as place_client:
-                delay = 0
+            try:
+                async with RedditPlaceClient(session, username, password, user_agent, self.debug) as place_client:
+                    delay = 0
 
-                while True:
-                    if delay > 0:
-                        await asyncio.sleep(delay)
+                    while True:
+                        if delay > 0:
+                            await asyncio.sleep(delay)
 
-                    await place_client.load_full_map()
+                        await place_client.load_full_map()
 
-                    # Compare current canvas to order map
-                    to_update = place_client.get_pixels_to_update(self.order_map)
+                        # Compare current canvas to order map
+                        to_update = place_client.get_pixels_to_update(self.order_map)
 
-                    if len(to_update) == 0:
-                        # No pixels to update, try again in 60 seconds
-                        delay = 60
-                    else:
-                        for pixel in to_update:
-                            hex = matplotlib.colors.to_hex(self.order_map[pixel[0], pixel[1], :3]).upper()
-                            color_index = COLOR_MAPPINGS[hex]
+                        if len(to_update) == 0:
+                            # No pixels to update, try again in 60 seconds
+                            delay = 60
+                        else:
+                            for pixel in to_update:
+                                hex = matplotlib.colors.to_hex(self.order_map[pixel[0], pixel[1], :3]).upper()
+                                color_index = COLOR_MAPPINGS[hex]
 
-                            success, delay = await place_client.place_pixel(pixel[0], pixel[1], color_index)
+                                success, delay = await place_client.place_pixel(pixel[0], pixel[1], color_index)
 
-                            if success:
-                                self.pixels_to_signal.append((*pixel, color_index))
-                                self.new_pixels_event.set()
+                                if success:
+                                    self.pixels_to_signal.append((*pixel, color_index))
+                                    self.new_pixels_event.set()
 
-                            break
+                                break
+            except LoginError:
+                print('Login error with', username, 'moving on...')
 
 
 async def main():
