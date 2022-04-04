@@ -674,7 +674,7 @@ class MainRunner:
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '-u', '--user', nargs=2, action="append",
+        '-u', '--user', nargs=2, action="append", default=[],
         help="Reddit username and password. Use this option multiple times to run with multiple users."
     )
     parser.add_argument(
