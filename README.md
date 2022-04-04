@@ -48,13 +48,16 @@ On Windows, docker is probably the easiest way.
 
 1. Install [Docker Desktop](https://docs.docker.com/desktop/windows/install/).
 2. Docker requires Windows Subsystem for Linux, so install that too.
-3. Open PowerShell and run the above listed Docker command, but use double quotes instead of 
-   single quotes.
+3. Docker requires a kernel update for WSL, install from here: 
+   https://docs.microsoft.com/en-us/windows/wsl/install-manual#step-4---download-the-linux-kernel-update-package.
+   Only step 4.1 is required.
+4. Open PowerShell and run the above listed Docker command, but use double quotes instead of 
+   single quotes (or specify a path to a config file, described below).
    
    ```bash
    docker run --pull=always --restart unless-stopped ghcr.io/placenl/placenl-python -u "USERNAME" "PASSWORD"
    ```
-4. It should be up and running! It will also automatically restart in case of a rare crash.
+5. It should be up and running! It will also automatically restart in case of a rare crash.
 
 ### Specifying users in a config file
 
