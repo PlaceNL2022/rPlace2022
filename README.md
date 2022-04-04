@@ -36,5 +36,5 @@ PlaceNL -u 'USERNAME1' 'PASSWORD1' -u 'USERNAME2' 'PASSWORD2'
 For people experienced with Docker, there's also a docker image you can run:
 
 ```bash
-docker run -t ghcr.io/placenl/placenl-python -u 'USERNAME' 'PASSWORD'
+docker run ghcr.io/placenl/placenl-python -u 'USERNAME' 'PASSWORD'
 ```
