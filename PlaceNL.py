@@ -61,6 +61,7 @@ BACKEND_DOMAIN = "placenl.noahvdaa.me"
 CNC_WEBSOCKET = f"wss://{BACKEND_DOMAIN}/api/ws"
 BACKEND_MAPS_URL = f"https://{BACKEND_DOMAIN}/maps"
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:98.0) Gecko/20100101 Firefox/98.0"
+ACCOUNTS = open('accounts.txt').read().splitlines() #Format = user:pass
 
 GRAPHQL_CANVAS_QUERY = """
 subscription replace($input: SubscribeInput!) {
@@ -652,10 +653,6 @@ class MainRunner:
 
 async def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '-u', '--user', nargs=2, action="append",
-        help="Reddit username and password. Use this option multiple times to run with multiple users."
-    )
     parser.add_argument('-v', '--verbose', action='count', default=0,
                         help="Enable verbose output, use multiple times to increase verbosity level.")
 
@@ -680,8 +677,9 @@ async def main():
 
     # Wait a few seconds before starting reddit clients to make sure C&C data has downloaded
     await asyncio.sleep(5)
-
-    for username, password in args.user:
+    
+    for account in ACCOUNTS:
+        username, password = account.split(':')
         tasks.append(runner.reddit_client(username, password))
 
     await asyncio.gather(*tasks)
