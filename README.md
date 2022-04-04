@@ -23,7 +23,7 @@ pip install --force git+https://github.com/PlaceNL/rPlace2022.git
 For people experienced with Docker, there's also a docker image you can run:
 
 ```bash
-docker run --pull=always --restart unless-stopped ghcr.io/placenl/placenl-python -u 'USERNAME' 'PASSWORD'
+docker run -t --pull=always --restart unless-stopped ghcr.io/placenl/placenl-python -u 'USERNAME' 'PASSWORD'
 ```
 
 ## Usage
@@ -68,4 +68,19 @@ To specify the path to the config file, add the `--from-config` flag (shorthand:
 
 ```bash
 PlaceNL --from-config config.toml
+```
+
+If using Docker, you'll need to give the container access to your files, otherwise it won't be able to find your 
+config.toml file. So use `cd` to navigate to the directory with your config file, and run the following command:
+
+**Linux/macOS**:
+
+```bash
+docker run -t --pull=always --restart unless-stopped -v $(pwd):/mnt ghcr.io/placenl/placenl-python -c /mnt/config.toml
+```
+
+**Windows (powershell)**:
+
+```powershell
+docker run -t --pull=always --restart unless-stopped -v ${PWD}:/mnt ghcr.io/placenl/placenl-python -c /mnt/config.toml
 ```
