@@ -461,7 +461,7 @@ class RedditPlaceClient:
 
                 self.logger.info("Loaded full canvas (shape: %s, dtype: %s)",
                                  self.current_canvas.shape, self.current_canvas.dtype)
-        except aiohttp.ServerDisconnectedError:
+        except aiohttp.ClientError:
             logger.exception("Could not obtain current canvas!")
 
     def get_pixels_to_update(self, order_map) -> list:
