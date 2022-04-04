@@ -18,7 +18,17 @@ and automatically place pixels at the desired locations.
 pip install --force git+https://github.com/PlaceNL/rPlace2022.git
 ```
 
+## Docker image
+
+For people experienced with Docker, there's also a docker image you can run:
+
+```bash
+docker run --pull=always ghcr.io/placenl/placenl-python -u 'USERNAME' 'PASSWORD'
+```
+
 ## Usage
+
+### Linux / macOS
 
 ```bash
 PlaceNL -u 'USERNAME' 'PASSWORD'
@@ -29,12 +39,13 @@ The bot supports multiple users:
 PlaceNL -u 'USERNAME1' 'PASSWORD1' -u 'USERNAME2' 'PASSWORD2'
 ```
 
-**IMPORTANT**: Use single quotes, otherwise your shell might interpret special characters.
+**IMPORTANT**: On macOS/Linux, use single quotes, otherwise your shell might 
+interpret special characters. 
 
-## Docker image
+### Windows
 
-For people experienced with Docker, there's also a docker image you can run:
+On Windows, docker is probably the easiest way. Install 
+[Docker Desktop](https://docs.docker.com/desktop/windows/install/), and pull and
+run our docker image as described above (open CMD.exe or PowerShell for that).
 
-```bash
-docker run ghcr.io/placenl/placenl-python -u 'USERNAME' 'PASSWORD'
-```
+**IMPORTANT**: On windows, single quotes are not supported, so use double quotes.
